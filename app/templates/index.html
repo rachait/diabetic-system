@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diabetes Prediction System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <h1>🏥 Diabetes Prediction System</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="/predict" class="nav-link">Predict</a></li>
+                <li><a href="#about" class="nav-link">About</a></li>
+                <li><a href="#contact" class="nav-link">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h2>AI-Powered Diabetes Risk Assessment</h2>
+                <p>Early detection saves lives. Use our advanced machine learning model to assess your diabetes risk based on medical parameters.</p>
+                <a href="/predict" class="btn btn-primary btn-lg">Get Started</a>
+            </div>
+        </div>
+    </header>
+
+    <section class="features">
+        <div class="container">
+            <h2>Why Choose Our System?</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>Advanced ML Models</h3>
+                    <p>Trained on diverse datasets using multiple classification algorithms for accurate predictions.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Real-Time Results</h3>
+                    <p>Get instant prediction results with confidence scores based on your medical parameters.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Data Preprocessing</h3>
+                    <p>Comprehensive handling of missing values, outliers, and class imbalance for better accuracy.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Privacy Focused</h3>
+                    <p>Your medical data is processed locally and never stored on our servers.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="how-it-works">
+        <div class="container">
+            <h2>How It Works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Enter Medical Data</h3>
+                    <p>Provide your medical parameters including glucose levels, BMI, age, and more.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>ML Processing</h3>
+                    <p>Our trained model analyzes your data using advanced preprocessing techniques.</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>Get Results</h3>
+                    <p>Receive instant prediction with confidence score and risk assessment.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="parameters">
+        <div class="container">
+            <h2>Medical Parameters Analyzed</h2>
+            <div class="parameter-grid">
+                <div class="param-item">
+                    <h4>Number of Pregnancies</h4>
+                    <p>Count of pregnancies</p>
+                </div>
+                <div class="param-item">
+                    <h4>Glucose Level</h4>
+                    <p>Blood glucose concentration (mg/dL)</p>
+                </div>
+                <div class="param-item">
+                    <h4>Blood Pressure</h4>
+                    <p>Diastolic blood pressure (mmHg)</p>
+                </div>
+                <div class="param-item">
+                    <h4>Skin Thickness</h4>
+                    <p>Triceps skin fold thickness (mm)</p>
+                </div>
+                <div class="param-item">
+                    <h4>Insulin Level</h4>
+                    <p>2-hour serum insulin (mu U/ml)</p>
+                </div>
+                <div class="param-item">
+                    <h4>BMI</h4>
+                    <p>Body Mass Index (weight/(height)²)</p>
+                </div>
+                <div class="param-item">
+                    <h4>Diabetes Pedigree Function</h4>
+                    <p>Genetic risk factor score</p>
+                </div>
+                <div class="param-item">
+                    <h4>Age</h4>
+                    <p>Age in years</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="about">
+        <div class="container">
+            <h2>About This System</h2>
+            <div class="about-content">
+                <p>This Diabetes Prediction System leverages machine learning to provide early risk assessment based on medical parameters. The system utilizes multiple classification algorithms including Logistic Regression, Random Forest, Gradient Boosting, SVM, and more.</p>
+                <p><strong>Key Features:</strong></p>
+                <ul>
+                    <li>Data preprocessing with outlier detection and removal</li>
+                    <li>Feature scaling for normalized input</li>
+                    <li>SMOTE-based class imbalance handling</li>
+                    <li>Cross-validation for robust model evaluation</li>
+                    <li>Real-time prediction with confidence scores</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Diabetes Prediction System. All rights reserved.</p>
+            <p><small>Disclaimer: This system is for educational purposes only and should not replace professional medical advice.</small></p>
+        </div>
+    </footer>
+</body>
+</html>

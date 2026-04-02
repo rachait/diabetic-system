@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      SECRET_KEY: change-me-in-production
+      FRONTEND_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/workspace/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE: /api
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend

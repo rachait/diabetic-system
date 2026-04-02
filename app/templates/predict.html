@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diabetes Prediction - Input Form</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <h1>🏥 Diabetes Prediction System</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="/predict" class="nav-link active">Predict</a></li>
+                <li><a href="/#about" class="nav-link">About</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="prediction-form">
+            <h2>Diabetes Risk Prediction</h2>
+            <p class="subtitle">Enter your medical parameters to assess your diabetes risk</p>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="/predict" class="form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="pregnancies">Number of Pregnancies</label>
+                        <input type="number" id="pregnancies" name="pregnancies" 
+                               min="0" max="20" step="1" required
+                               placeholder="0">
+                        <small>Count of pregnancies (0-20)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="glucose">Glucose Level (mg/dL)</label>
+                        <input type="number" id="glucose" name="glucose" 
+                               min="0" max="300" step="0.1" required
+                               placeholder="120">
+                        <small>Blood glucose concentration</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="blood_pressure">Blood Pressure (mmHg)</label>
+                        <input type="number" id="blood_pressure" name="blood_pressure" 
+                               min="0" max="200" step="0.1" required
+                               placeholder="80">
+                        <small>Diastolic blood pressure</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="skin_thickness">Skin Thickness (mm)</label>
+                        <input type="number" id="skin_thickness" name="skin_thickness" 
+                               min="0" max="100" step="0.1" required
+                               placeholder="20">
+                        <small>Triceps skin fold thickness</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="insulin">Insulin Level (mu U/ml)</label>
+                        <input type="number" id="insulin" name="insulin" 
+                               min="0" max="900" step="0.1" required
+                               placeholder="80">
+                        <small>2-hour serum insulin</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bmi">BMI (Body Mass Index)</label>
+                        <input type="number" id="bmi" name="bmi" 
+                               min="0" max="100" step="0.1" required
+                               placeholder="25">
+                        <small>Weight in kg / (Height in m)²</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="diabetes_pedigree">Diabetes Pedigree Function</label>
+                        <input type="number" id="diabetes_pedigree" name="diabetes_pedigree" 
+                               min="0" max="5" step="0.001" required
+                               placeholder="0.5">
+                        <small>Genetic risk factor score (0-5)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="age">Age (years)</label>
+                        <input type="number" id="age" name="age" 
+                               min="0" max="120" step="1" required
+                               placeholder="30">
+                        <small>Age in years</small>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary btn-lg">Predict Risk</button>
+                    <button type="reset" class="btn btn-secondary">Clear</button>
+                </div>
+            </form>
+
+            <div class="info-box">
+                <h3>📋 Important Information</h3>
+                <ul>
+                    <li>All fields are required for accurate prediction</li>
+                    <li>Values should be accurate medical measurements</li>
+                    <li>This prediction is for educational purposes only</li>
+                    <li>Always consult with a healthcare professional for medical advice</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Diabetes Prediction System. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>

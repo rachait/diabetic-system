@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <h1>🏥 Diabetes Prediction System</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="/predict" class="nav-link">Predict</a></li>
+                <li><a href="/#about" class="nav-link">About</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="results">
+            {% if result.status == 'success' %}
+                <div class="result-card {% if result.prediction == 'Diabetic' %}high-risk{% else %}low-risk{% endif %}">
+                    <h2>Prediction Results</h2>
+                    
+                    <div class="result-box">
+                        <div class="prediction-result">
+                            <div class="result-icon">
+                                {% if result.prediction == 'Diabetic' %}
+                                    ⚠️
+                                {% else %}
+                                    ✅
+                                {% endif %}
+                            </div>
+                            <div class="result-text">
+                                <h3>{{ result.prediction }}</h3>
+                                <p class="result-status">
+                                    {% if result.prediction == 'Diabetic' %}
+                                        High Risk - Immediate medical consultation recommended
+                                    {% else %}
+                                        Low Risk - Continue healthy lifestyle
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+
+                        {% if result.confidence %}
+                            <div class="confidence-box">
+                                <h4>Confidence Level</h4>
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" style="width: {{ result.confidence }}%"></div>
+                                </div>
+                                <p class="confidence-value">{{ "%.2f"|format(result.confidence) }}%</p>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="input-summary">
+                        <h4>Your Medical Parameters</h4>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span class="label">Pregnancies:</span>
+                                <span class="value">{{ result.input_data.Pregnancies }}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="label">Glucose:</span>
+                                <span class="value">{{ "%.1f"|format(result.input_data.Glucose) }} mg/dL</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="label">Blood Pressure:</span>
+                                <span class="value">{{ "%.1f"|format(result.input_data.BloodPressure) }} mmHg</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="label">Skin Thickness:</span>
+                                <span class="value">{{ "%.1f"|format(result.input_data.SkinThickness) }} mm</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="label">Insulin:</span>
+                                <span class="value">{{ "%.1f"|format(result.input_data.Insulin) }} mu U/ml</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="label">BMI:</span>
+                                <span class="value">{{ "%.2f"|format(result.input_data.BMI) }}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="label">Diabetes Pedigree:</span>
+                                <span class="value">{{ "%.4f"|format(result.input_data.DiabetesPedigreeFunction) }}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="label">Age:</span>
+                                <span class="value">{{ result.input_data.Age }} years</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recommendations">
+                        <h4>📌 Recommendations</h4>
+                        {% if result.prediction == 'Diabetic' %}
+                            <ul>
+                                <li>Schedule an appointment with an endocrinologist</li>
+                                <li>Get a comprehensive diabetes screening</li>
+                                <li>Start monitoring glucose levels regularly</li>
+                                <li>Adopt a healthy diet and exercise routine</li>
+                                <li>Reduce stress and ensure adequate sleep</li>
+                            </ul>
+                        {% else %}
+                            <ul>
+                                <li>Maintain a balanced and healthy diet</li>
+                                <li>Exercise regularly (at least 150 minutes per week)</li>
+                                <li>Monitor your weight and BMI</li>
+                                <li>Get regular health checkups</li>
+                                <li>Manage stress and maintain good sleep patterns</li>
+                            </ul>
+                        {% endif %}
+                    </div>
+
+                    <div class="disclaimer">
+                        <p><strong>⚕️ Medical Disclaimer:</strong> This prediction is generated by an AI model and is for educational and informational purposes only. It should not be used as a substitute for professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare professional for medical decisions.</p>
+                    </div>
+
+                    <div class="actions">
+                        <a href="/predict" class="btn btn-primary">Make Another Prediction</a>
+                        <a href="/" class="btn btn-secondary">Back to Home</a>
+                    </div>
+                </div>
+            {% else %}
+                <div class="error-card">
+                    <h2>Error</h2>
+                    <p>{{ result.message }}</p>
+                    <a href="/predict" class="btn btn-primary">Try Again</a>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Diabetes Prediction System. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>

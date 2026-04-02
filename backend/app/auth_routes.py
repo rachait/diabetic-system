@@ -1,0 +1,192 @@
+"""
+Authentication and User Management Routes
+"""
+from flask import Blueprint, request, jsonify, session
+import hashlib
+import secrets
+from database import get_db_connection
+
+auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+
+def hash_password(password):
+    """Hash password with salt"""
+    salt = secrets.token_hex(16)
+    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+    return f"{salt}${pwd_hash.hex()}"
+
+def verify_password(stored_hash, password):
+    """Verify password against hash"""
+    try:
+        salt, pwd_hash = stored_hash.split('$')
+        computed_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+        return computed_hash.hex() == pwd_hash
+    except:
+        return False
+
+def get_user_by_id(user_id):
+    """Get user from database"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    return dict(user) if user else None
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    """Register new user"""
+    try:
+        data = request.get_json() or {}
+        username = data.get('username', '').strip()
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        full_name = data.get('full_name', '').strip()
+        
+        if not all([username, email, password]):
+            return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+        
+        if len(password) < 6:
+            return jsonify({'status': 'error', 'message': 'Password must be at least 6 characters'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if user exists
+        cursor.execute('SELECT id FROM users WHERE username = ? OR email = ?', (username, email))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'Username or email already exists'}), 409
+        
+        # Create user
+        pwd_hash = hash_password(password)
+        cursor.execute('''
+            INSERT INTO users (username, email, password_hash, full_name)
+            VALUES (?, ?, ?, ?)
+        ''', (username, email, pwd_hash, full_name))
+        conn.commit()
+        
+        user_id = cursor.lastrowid
+        conn.close()
+        
+        session['user_id'] = user_id
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Registration successful',
+            'user_id': user_id,
+            'username': username
+        }), 201
+    
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    """Login user"""
+    try:
+        data = request.get_json() or {}
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        
+        if not username or not password:
+            return jsonify({'status': 'error', 'message': 'Missing username or password'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if not user or not verify_password(user['password_hash'], password):
+            return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
+        
+        session['user_id'] = user['id']
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Login successful',
+            'user_id': user['id'],
+            'username': user['username'],
+            'email': user['email'],
+            'full_name': user['full_name']
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    """Logout user"""
+    session.clear()
+    return jsonify({'status': 'success', 'message': 'Logged out'}), 200
+
+@auth_bp.route('/profile', methods=['GET', 'PUT'])
+def profile():
+    """Get or update user profile"""
+    try:
+        user_id = session.get('user_id')
+        
+        if not user_id:
+            return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
+        
+        if request.method == 'GET':
+            user = get_user_by_id(user_id)
+            if not user:
+                return jsonify({'status': 'error', 'message': 'User not found'}), 404
+            
+            # Remove password hash from response
+            user.pop('password_hash', None)
+            return jsonify({'status': 'success', 'user': user}), 200
+        
+        elif request.method == 'PUT':
+            data = request.get_json() or {}
+            full_name = data.get('full_name')
+            age = data.get('age')
+            medical_history = data.get('medical_history')
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            updates = []
+            params = []
+            
+            if full_name is not None:
+                updates.append('full_name = ?')
+                params.append(full_name)
+            if age is not None:
+                updates.append('age = ?')
+                params.append(age)
+            if medical_history is not None:
+                updates.append('medical_history = ?')
+                params.append(medical_history)
+            
+            if updates:
+                updates.append('updated_at = CURRENT_TIMESTAMP')
+                params.append(user_id)
+                
+                query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+                cursor.execute(query, params)
+                conn.commit()
+            
+            conn.close()
+            
+            user = get_user_by_id(user_id)
+            user.pop('password_hash', None)
+            
+            return jsonify({'status': 'success', 'message': 'Profile updated', 'user': user}), 200
+    
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@auth_bp.route('/check', methods=['GET'])
+def check_session():
+    """Check if user is logged in"""
+    user_id = session.get('user_id')
+    
+    if user_id:
+        user = get_user_by_id(user_id)
+        if user:
+            user.pop('password_hash', None)
+            return jsonify({'status': 'success', 'authenticated': True, 'user': user}), 200
+    
+    return jsonify({'status': 'success', 'authenticated': False}), 200
