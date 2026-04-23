@@ -2,8 +2,9 @@
 Risk Assessment & Nutritionist Booking Routes
 """
 from flask import Blueprint, request, jsonify, session
-from database import get_db_connection
+from database import DB_PATH, get_db_connection
 import numpy as np
+import os
 from . import routes as diabetes_routes
 
 wellness_bp = Blueprint('wellness', __name__, url_prefix='/api/wellness')
@@ -490,4 +491,157 @@ def chatbot():
             'insights': insights
         }), 200
     except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@wellness_bp.route('/admin/overview', methods=['GET'])
+def admin_overview():
+    """Return lightweight admin metrics and storage overview."""
+    import traceback
+    import json
+    
+    print("\n[ADMIN] Starting admin_overview request...")
+    
+    try:
+        user_id = session.get('user_id')
+        print(f"[ADMIN] User ID from session: {user_id}")
+        
+        if not user_id:
+            print("[ADMIN] No user_id in session, returning 401")
+            return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check admin status
+        cursor.execute('SELECT is_admin FROM users WHERE id = ?', (user_id,))
+        viewer = cursor.fetchone()
+        print(f"[ADMIN] Viewer data: {viewer}")
+        
+        if not viewer or int(viewer['is_admin'] or 0) != 1:
+            conn.close()
+            print("[ADMIN] User is not admin, returning 403")
+            return jsonify({'status': 'error', 'message': 'Admin access required'}), 403
+
+        print("[ADMIN] User is admin, proceeding...")
+
+        # Get basic metrics
+        cursor.execute('SELECT COUNT(*) AS total_users FROM users')
+        total_users = int(cursor.fetchone()['total_users'])
+
+        cursor.execute('SELECT COUNT(*) AS total_assessments FROM risk_assessments')
+        total_assessments = int(cursor.fetchone()['total_assessments'])
+
+        cursor.execute('SELECT COUNT(*) AS diabetic_count FROM risk_assessments WHERE prediction = ?', ('Diabetic',))
+        diabetic_count = int(cursor.fetchone()['diabetic_count'])
+
+        cursor.execute('SELECT COUNT(*) AS booking_count FROM nutritionist_bookings')
+        booking_count = int(cursor.fetchone()['booking_count'])
+
+        print(f"[ADMIN] Metrics: users={total_users}, assessments={total_assessments}, diabetic={diabetic_count}")
+
+        # Recent assessments
+        cursor.execute('''
+            SELECT id, user_id, prediction, confidence, created_at
+            FROM risk_assessments
+            ORDER BY created_at DESC
+            LIMIT 8
+        ''')
+        recent_assessments = []
+        for row in cursor.fetchall():
+            recent_assessments.append({
+                'id': row['id'],
+                'user_id': row['user_id'],
+                'prediction': row['prediction'],
+                'confidence': float(row['confidence']) if row['confidence'] else None,
+                'created_at': str(row['created_at'])
+            })
+
+        # Trend data - SIMPLIFIED to avoid JSON issues
+        cursor.execute('''
+            SELECT DATE(created_at) AS day,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN prediction = 'Diabetic' THEN 1 ELSE 0 END) AS diabetic
+            FROM risk_assessments
+            WHERE created_at >= DATETIME('now', '-14 days')
+            GROUP BY DATE(created_at)
+            ORDER BY day ASC
+        ''')
+        trends = []
+        for row in cursor.fetchall():
+            trends.append({
+                'day': str(row['day']) if row['day'] else None,
+                'total': int(row['total']) if row['total'] else 0,
+                'diabetic': int(row['diabetic']) if row['diabetic'] else 0
+            })
+
+        # Simplified user data query
+        cursor.execute('''
+            SELECT
+                u.id,
+                u.username,
+                u.email,
+                u.full_name,
+                u.age,
+                COUNT(ra.id) AS assessment_count,
+                SUM(CASE WHEN ra.prediction = 'Diabetic' THEN 1 ELSE 0 END) AS diabetic_count
+            FROM users u
+            LEFT JOIN risk_assessments ra ON ra.user_id = u.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+        ''')
+        users_list = []
+        for row in cursor.fetchall():
+            users_list.append({
+                'id': row['id'],
+                'username': row['username'],
+                'email': row['email'],
+                'full_name': row['full_name'],
+                'age': row['age'],
+                'assessment_count': int(row['assessment_count']) if row['assessment_count'] else 0,
+                'diabetic_count': int(row['diabetic_count']) if row['diabetic_count'] else 0
+            })
+
+        print(f"[ADMIN] Processed {len(users_list)} users and {len(trends)} trend days")
+
+        db_size_mb = 0.0
+        db_path_str = str(DB_PATH)
+        try:
+            db_size_mb = round(float(os.path.getsize(db_path_str)) / (1024 * 1024), 3)
+        except Exception as e:
+            print(f"[ADMIN] Error getting DB size: {e}")
+            db_size_mb = 0.0
+
+        response_data = {
+            'status': 'success',
+            'overview': {
+                'total_users': total_users,
+                'total_assessments': total_assessments,
+                'diabetic_assessments': diabetic_count,
+                'non_diabetic_assessments': max(total_assessments - diabetic_count, 0),
+                'nutritionist_bookings': booking_count
+            },
+            'storage': {
+                'database_type': 'SQLite',
+                'database_path': db_path_str,
+                'database_size_mb': db_size_mb,
+                'tables': ['users', 'risk_assessments', 'products', 'cart_items', 'orders', 'order_items', 'nutritionist_bookings', 'meal_plans']
+            },
+            'trends': trends,
+            'users_data': users_list,
+            'recent_assessments': recent_assessments,
+            'viewer': {'user_id': user_id}
+        }
+        
+        # Test JSON serialization
+        json_test = json.dumps(response_data)
+        print(f"[ADMIN] Response is JSON-serializable ({len(json_test)} bytes)")
+        
+        conn.close()
+        print("[ADMIN] Returning 200 with admin data")
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        print(f"[ADMIN] ERROR: {str(e)}")
+        traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500

@@ -29,6 +29,7 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0,
             full_name TEXT,
             age INTEGER,
             medical_history TEXT,
@@ -36,6 +37,12 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    # Lightweight migration for existing databases created before is_admin existed.
+    cursor.execute("PRAGMA table_info(users)")
+    user_columns = [row[1] for row in cursor.fetchall()]
+    if 'is_admin' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
     
     # Risk assessments (diabetes predictions)
     cursor.execute('''

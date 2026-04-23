@@ -25,5 +25,6 @@ export const api = {
   predict: (payload) => request("/predict", { method: "POST", body: JSON.stringify(payload) }),
   saveAssessment: (payload) => request("/wellness/risk-assessment", { method: "POST", body: JSON.stringify(payload) }),
   getHistory: () => request("/wellness/risk-assessment/history"),
+  getAdminOverview: () => request("/wellness/admin/overview"),
   chatbot: (payload) => request("/wellness/chatbot", { method: "POST", body: JSON.stringify(payload) }),
 };

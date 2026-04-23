@@ -9,19 +9,19 @@ app = create_app('development')
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
-    from flask import render_template
-    return render_template('404.html'), 404
+    from flask import jsonify
+    return jsonify({'status': 'error', 'message': 'Endpoint not found'}), 404
 
 @app.errorhandler(500)
 def server_error(error):
-    from flask import render_template
-    return render_template('500.html'), 500
+    from flask import jsonify
+    return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
 
 # Root route
 @app.route('/')
 def index():
-    from flask import render_template
-    return render_template('index.html')
+    from flask import jsonify
+    return jsonify({'status': 'success', 'message': 'Diabetes Prediction Backend API', 'version': '1.0'}), 200
 
 if __name__ == '__main__':
     # Ensure upload folder exists

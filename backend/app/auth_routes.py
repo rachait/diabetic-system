@@ -57,12 +57,17 @@ def register():
             conn.close()
             return jsonify({'status': 'error', 'message': 'Username or email already exists'}), 409
         
+        # First registered account becomes admin to bootstrap dashboard access.
+        cursor.execute('SELECT COUNT(*) AS admin_count FROM users WHERE is_admin = 1')
+        admin_count = int(cursor.fetchone()['admin_count'])
+        is_admin = 1 if admin_count == 0 else 0
+
         # Create user
         pwd_hash = hash_password(password)
         cursor.execute('''
-            INSERT INTO users (username, email, password_hash, full_name)
-            VALUES (?, ?, ?, ?)
-        ''', (username, email, pwd_hash, full_name))
+            INSERT INTO users (username, email, password_hash, full_name, is_admin)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (username, email, pwd_hash, full_name, is_admin))
         conn.commit()
         
         user_id = cursor.lastrowid
@@ -74,7 +79,8 @@ def register():
             'status': 'success',
             'message': 'Registration successful',
             'user_id': user_id,
-            'username': username
+            'username': username,
+            'is_admin': bool(is_admin)
         }), 201
     
     except Exception as e:
@@ -108,7 +114,8 @@ def login():
             'user_id': user['id'],
             'username': user['username'],
             'email': user['email'],
-            'full_name': user['full_name']
+            'full_name': user['full_name'],
+            'is_admin': bool(user['is_admin'])
         }), 200
     
     except Exception as e:
