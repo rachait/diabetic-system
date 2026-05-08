@@ -1,5 +1,7 @@
 # AI Diabetes Prediction System
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-diabetic--system-blue?logo=github)](https://github.com/rachait/diabetic-system)
+
 A full-stack healthcare web app for diabetes risk prediction using a trained machine learning model, with user authentication, risk history tracking, wellness recommendations, and a product/store workflow.
 
 ## Tech Stack
@@ -188,3 +190,20 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ## Disclaimer
 
 This application provides decision-support insights only and is not a medical diagnosis tool. Always consult qualified healthcare professionals for medical advice.
+
+## Getting This Repository
+
+Clone from GitHub:
+
+```bash
+git clone https://github.com/rachait/diabetic-system.git
+cd diabetic-system
+```
+
+Or push an existing local copy:
+
+```bash
+git remote add origin https://github.com/rachait/diabetic-system.git
+git branch -M main
+git push -u origin main
+```

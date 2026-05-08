@@ -1,3 +1,25 @@
+# --- Doctor seeding ---
+def seed_doctors():
+    """Seed initial doctor data"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Check if doctors already exist
+    cursor.execute('SELECT COUNT(*) as count FROM doctors')
+    if cursor.fetchone()['count'] > 0:
+        conn.close()
+        return
+    doctors = [
+        ("Rachait Talwar", "Endocrinology", "Monday,Wednesday,Friday", 500, "available", None, 0),
+        ("Vinit Pandey", "Internal Medicine", "Tuesday,Thursday", 400, "available", None, 0),
+    ]
+    for name, specialization, days, fee, status, avatar, slots in doctors:
+        cursor.execute('''
+            INSERT INTO doctors (name, specialization, available_days, consultation_fee, status, avatar_url, slot_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (name, specialization, days, fee, status, avatar, slots))
+    conn.commit()
+    conn.close()
+    print("[DB] Doctors seeded successfully")
 """
 Database initialization and models for User, Store, Cart, and Booking management
 """
@@ -18,8 +40,24 @@ def get_db_connection():
 def init_db():
     """Initialize database with tables"""
     Path(os.path.dirname(DB_PATH)).mkdir(parents=True, exist_ok=True)
-    
     conn = get_db_connection()
+    cursor = conn.cursor()
+    # Appointments table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            doctor_id INTEGER NOT NULL,
+            appointment_date TEXT NOT NULL,
+            time_slot TEXT,
+            appointment_type TEXT DEFAULT 'in-person',
+            status TEXT DEFAULT 'confirmed',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (doctor_id) REFERENCES doctors(id)
+        )
+    ''')
     cursor = conn.cursor()
     
     # Users table
@@ -44,6 +82,23 @@ def init_db():
     if 'is_admin' not in user_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
     
+    # Doctors table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS doctors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            specialization TEXT NOT NULL,
+            available_days TEXT NOT NULL, -- Comma-separated days (e.g., 'Monday,Wednesday,Friday')
+            consultation_fee REAL NOT NULL,
+            status TEXT DEFAULT 'available', -- available, busy, inactive
+            avatar_url TEXT,
+            average_rating REAL DEFAULT 0,
+            slot_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     # Risk assessments (diabetes predictions)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS risk_assessments (
@@ -147,6 +202,21 @@ def init_db():
             FOREIGN KEY (product_id) REFERENCES products(id)
         )
     ''')
+
+    # Authentication activity logs (admin audit trail)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS auth_activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            event_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
     
     conn.commit()
     conn.close()
@@ -178,6 +248,7 @@ def seed_products():
         # Wellness Products
         ("Blood Glucose Monitor Bundle", "Devices", "Includes meter, strips, and lancets", 79.99, 50, "https://via.placeholder.com/200?text=BGMonitor", "Monitoring, Accuracy", "Diabetic"),
         ("Smart Fitness Tracker", "Wearables", "Track activity, sleep, and heart rate", 129.99, 40, "https://via.placeholder.com/200?text=Tracker", "Activity tracking", "All risk levels"),
+            ("Doctors", "Services", "Consultation with certified doctors", 0.0, 10, None, "Medical consultation", "All patients"),
     ]
     
     for name, category, desc, price, qty, img, benefits, audience in products:
@@ -194,3 +265,4 @@ def seed_products():
 if not os.path.exists(DB_PATH):
     init_db()
     seed_products()
+    seed_doctors()

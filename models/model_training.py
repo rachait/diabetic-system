@@ -5,6 +5,8 @@ Trains multiple classification models for diabetes prediction
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+
+from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
@@ -37,19 +39,33 @@ class ModelTrainer:
         """
         models = {
             'Logistic Regression': LogisticRegression(
-                random_state=42, max_iter=1000, solver='lbfgs'
-            ),
-            'Random Forest': RandomForestClassifier(
-                n_estimators=100, random_state=42, n_jobs=-1,
-                max_depth=10, min_samples_split=5
-            ),
+    random_state=42,
+    max_iter=1000,
+    class_weight='balanced'
+),
+           'Random Forest': RandomForestClassifier(
+    n_estimators=200,
+    random_state=42,
+    class_weight='balanced'
+),
+            
             'Gradient Boosting': GradientBoostingClassifier(
-                n_estimators=100, random_state=42,
-                max_depth=5, learning_rate=0.1
-            ),
-            'SVM': SVC(
-                kernel='rbf', random_state=42, probability=True
-            ),
+    n_estimators=100,
+    learning_rate=0.1,
+    random_state=42
+),
+           'SVM': SVC(
+    kernel='rbf',
+    probability=True,
+    class_weight='balanced',
+    random_state=42
+),
+           
+'XGBoost': XGBClassifier(
+    scale_pos_weight=3,
+    use_label_encoder=False,
+    eval_metric='logloss'
+),
             'KNN': KNeighborsClassifier(
                 n_neighbors=5, n_jobs=-1
             ),
@@ -62,6 +78,7 @@ class ModelTrainer:
         self.models = models
         print(f"Created {len(models)} models: {list(models.keys())}")
         return models
+    
     
     def train_models(self, X_train, y_train):
         """
@@ -100,7 +117,7 @@ class ModelTrainer:
         results = []
         
         for name, model in self.models.items():
-            scores = cross_val_score(model, X_train, y_train, cv=cv, scoring='accuracy')
+            scores = cross_val_score(model, X_train, y_train, cv=cv, scoring='f1')
             self.cv_scores[name] = scores
             
             mean_score = scores.mean()
@@ -177,7 +194,9 @@ class ModelTrainer:
             'KNN': {
                 'n_neighbors': [3, 5, 7, 9],
                 'weights': ['uniform', 'distance']
-            }
+            },
+            
+
         }
         
         if model_name not in param_grids:

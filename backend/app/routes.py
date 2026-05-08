@@ -34,6 +34,37 @@ def _confidence_band(probability):
     return 'low'
 
 
+def _diabetes_probability(model_obj, features_scaled):
+    """Return probability for the diabetic class (class label 1) when available."""
+    if not hasattr(model_obj, 'predict_proba'):
+        return None
+
+    prob = model_obj.predict_proba(features_scaled)
+    classes = getattr(model_obj, 'classes_', None)
+    if classes is None:
+        return float(prob[0][-1])
+
+    for idx, cls in enumerate(classes):
+        if int(cls) == 1:
+            return float(prob[0][idx])
+    return float(prob[0][-1])
+
+
+def _clinical_risk_floor(input_payload):
+    """Rule-based minimum risk band to avoid false-low outputs on strong signals."""
+    glucose = float(input_payload.get('glucose', 0))
+    bmi = float(input_payload.get('bmi', 0))
+    age = float(input_payload.get('age', 0))
+    dpf = float(input_payload.get('diabetes_pedigree', 0))
+    insulin = float(input_payload.get('insulin', 0))
+
+    if glucose >= 200 or (glucose >= 180 and bmi >= 30) or (glucose >= 160 and insulin >= 250):
+        return 'high'
+    if glucose >= 140 or (bmi >= 30 and age >= 45) or (dpf >= 1.0 and age >= 35):
+        return 'medium'
+    return 'low'
+
+
 def _check_rate_limit(client_id, limit=20, window_seconds=60):
     """Simple in-memory sliding window rate limiter for prediction API."""
     now = time.time()
@@ -122,6 +153,17 @@ def _build_action_plan(risk_level):
     if risk_level == 'medium':
         return medium_plan
     return low_plan
+
+
+def _readable_prediction_label(risk_level):
+    """Map internal risk bands to user-facing labels as requested.
+
+    - 'more risk - Diabetic' for medium/high risk
+    - 'less risk - Non-Diabetic' for low risk
+    """
+    if risk_level in ('high', 'medium'):
+        return 'more risk - Diabetic'
+    return 'less risk - Non-Diabetic'
 
 
 def _input_warnings(input_payload):
@@ -217,17 +259,49 @@ def predict():
                 # Make prediction
                 prediction = int(model.predict(features_scaled)[0])
 
-                # Get prediction probability
+                # Use diabetic-class probability for more reliable risk signaling
                 try:
-                    prob = model.predict_proba(features_scaled)
-                    probability = float(prob[0][prediction]) * 100
+                    diabetes_prob = _diabetes_probability(model, features_scaled)
+                    if diabetes_prob is not None:
+                        probability = diabetes_prob * 100 if prediction == 1 else (1 - diabetes_prob) * 100
+                    else:
+                        probability = None
                 except Exception:
                     probability = None
 
+                # Compute risk level and map to readable label for UI
+                clinical_floor = _clinical_risk_floor({
+                    'glucose': input_data.get('Glucose', 0),
+                    'bmi': input_data.get('BMI', 0),
+                    'age': input_data.get('Age', 0),
+                    'diabetes_pedigree': input_data.get('DiabetesPedigreeFunction', 0),
+                    'insulin': input_data.get('Insulin', 0)
+                })
+                if diabetes_prob is None:
+                    risk_level = 'medium' if prediction == 1 else 'low'
+                else:
+                    dp = diabetes_prob
+                    if dp >= 0.75:
+                        model_risk = 'high'
+                    elif dp >= 0.45:
+                        model_risk = 'medium'
+                    else:
+                        model_risk = 'low'
+                    risk_level = model_risk
+
+                # clinical rules can elevate risk
+                risk_rank = {'low': 1, 'medium': 2, 'high': 3}
+                if risk_rank[clinical_floor] > risk_rank[risk_level]:
+                    risk_level = clinical_floor
+
+                readable = _readable_prediction_label(risk_level)
+
                 result = {
                     'status': 'success',
-                    'prediction': 'Diabetic' if prediction == 1 else 'Non-Diabetic',
+                    'prediction': readable,
+                    'raw_prediction': 'Diabetic' if prediction == 1 else 'Non-Diabetic',
                     'confidence': probability,
+                    'risk_level': risk_level,
                     'input_data': input_data
                 }
             else:
@@ -292,15 +366,27 @@ def api_predict():
         # Make prediction
         prediction = int(model.predict(features_scaled)[0])
 
-        # Get probability
-        try:
-            prob = model.predict_proba(features_scaled)
-            probability = float(prob[0][prediction])
-        except Exception:
-            probability = None
+        diabetes_probability = _diabetes_probability(model, features_scaled)
+        clinical_floor = _clinical_risk_floor(data)
+        risk_rank = {'low': 1, 'medium': 2, 'high': 3}
 
-        risk_level = 'high' if prediction == 1 and probability is not None and probability >= 0.8 else 'medium' if prediction == 1 else 'low'
-        confidence_band = _confidence_band(probability)
+        if diabetes_probability is None:
+            probability = None
+            risk_level = 'medium' if prediction == 1 else 'low'
+            confidence_band = _confidence_band(None)
+        else:
+            probability = diabetes_probability if prediction == 1 else (1 - diabetes_probability)
+            if diabetes_probability >= 0.75:
+                model_risk_level = 'high'
+            elif diabetes_probability >= 0.45:
+                model_risk_level = 'medium'
+            else:
+                model_risk_level = 'low'
+            risk_level = model_risk_level
+            confidence_band = _confidence_band(diabetes_probability)
+
+        if risk_rank[clinical_floor] > risk_rank[risk_level]:
+            risk_level = clinical_floor
         explanation_factors = _extract_explanations(data, scaler)
         warnings = _input_warnings(data)
         emergency_notice = 'Seek urgent medical evaluation for very high glucose readings or concerning symptoms.' if float(data.get('glucose', 0)) >= 250 else None
@@ -322,9 +408,13 @@ def api_predict():
             ]
         }
 
+        # Map to user-friendly label
+        readable = _readable_prediction_label(risk_level)
+
         return jsonify({
             'status': 'success',
-            'prediction': 'Diabetic' if prediction == 1 else 'Non-Diabetic',
+            'prediction': readable,
+            'raw_prediction': 'Diabetic' if prediction == 1 else 'Non-Diabetic',
             'confidence': probability,
             'confidence_band': confidence_band,
             'prediction_value': prediction,
@@ -408,12 +498,8 @@ def iot_data():
 
         features_scaled = scaler.transform(features)
         prediction_value = int(model.predict(features_scaled)[0])
-        probability = None
-        try:
-            prob = model.predict_proba(features_scaled)
-            probability = float(prob[0][prediction_value])
-        except Exception:
-            probability = None
+        diabetes_probability = _diabetes_probability(model, features_scaled)
+        probability = diabetes_probability if diabetes_probability is not None else None
 
         return jsonify({
             'status': 'success',

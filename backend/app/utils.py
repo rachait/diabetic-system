@@ -16,6 +16,13 @@ def allowed_file(filename):
 
 def validate_prediction_input(data):
     """Validate prediction input data"""
+
+    # Require gender before pregnancies
+    if 'gender' not in data or not str(data['gender']).strip():
+        return False, "Missing or invalid gender. Please select gender before entering pregnancies."
+    if str(data['gender']).strip().lower() not in {'male', 'female', 'other'}:
+        return False, "gender must be Male, Female, or Other"
+
     required_fields = [
         'pregnancies', 'glucose', 'blood_pressure', 'skin_thickness',
         'insulin', 'bmi', 'diabetes_pedigree', 'age'
@@ -48,6 +55,11 @@ def validate_prediction_input(data):
         value = float(data[field])
         if not (min_val <= value <= max_val):
             return False, f"{field} out of valid range ({min_val}-{max_val})"
+
+    gender = data.get('gender')
+    if gender is not None and str(gender).strip():
+        if str(gender).strip().lower() not in {'male', 'female', 'other'}:
+            return False, "gender must be Male, Female, or Other"
 
     return True, None
 

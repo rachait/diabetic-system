@@ -24,9 +24,18 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "./api";
+import HealthcareManagement from "./HealthcareManagement";
+import UserStore from "./UserStore";
 
 const fields = [
   { key: "pregnancies", label: "Pregnancies", min: 0, max: 20, step: 1, tip: "Total number of pregnancies." },
+  {
+    key: "gender",
+    label: "Gender",
+    type: "select",
+    tip: "Select the user's gender for record-keeping and future model support.",
+    options: ["Male", "Female", "Other"],
+  },
   { key: "glucose", label: "Glucose", min: 0, max: 300, step: 1, tip: "Plasma glucose concentration in mg/dL. Enter a value between 0 and 300." },
   { key: "blood_pressure", label: "Blood Pressure", min: 0, max: 200, step: 1, tip: "Diastolic blood pressure (mm Hg)." },
   { key: "skin_thickness", label: "Skin Thickness", min: 0, max: 100, step: 1, tip: "Triceps skin fold thickness (mm)." },
@@ -45,6 +54,7 @@ const fields = [
 
 const defaultPayload = {
   pregnancies: "",
+  gender: "Male",
   glucose: "",
   blood_pressure: "",
   skin_thickness: "",
@@ -66,6 +76,14 @@ function loadGuestHistoryFromStorage() {
   } catch {
     return [];
   }
+}
+
+function normalizeGenderValue(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["male", "man", "boy"].includes(normalized)) return "Male";
+  if (["female", "woman", "girl"].includes(normalized)) return "Female";
+  if (["other", "non-binary", "nonbinary"].includes(normalized)) return "Other";
+  return "";
 }
 
 function saveGuestHistoryToStorage(entries) {
@@ -302,7 +320,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState([
     {
       role: "assistant",
-      content: "I am your AI wellness assistant. Ask me about your result, food, exercise, or diabetes prevention.",
+      content: "I’m your AI wellness assistant. Ask me anything about your result, food, exercise, prevention, or follow-up care.",
     },
   ]);
 
@@ -385,6 +403,10 @@ function App() {
 
   function validateField(field, value) {
     if (value === "") return "This field is required.";
+    if (field.type === "select") {
+      if (!field.options.includes(value)) return "Choose a valid option.";
+      return "";
+    }
     const numeric = Number(value);
     if (Number.isNaN(numeric)) return "Enter a valid number.";
     if (numeric < field.min || numeric > field.max) {
@@ -405,7 +427,10 @@ function App() {
 
   function payloadFromForm() {
     return Object.fromEntries(
-      Object.entries(form).map(([key, value]) => [key, Number(value)])
+      Object.entries(form).map(([key, value]) => {
+        const field = fields.find((item) => item.key === key);
+        return [key, field?.type === "select" ? value : Number(value)];
+      })
     );
   }
 
@@ -497,19 +522,22 @@ function App() {
     setAdminOverviewError("");
   }
 
-  async function askAssistant() {
-    if (!chatQuestion.trim()) return;
-    const nextMessages = [...chatMessages, { role: "user", content: chatQuestion }];
+  async function submitAssistantQuestion(questionText) {
+    const prompt = questionText.trim();
+    if (!prompt) return;
+
+    const nextMessages = [...chatMessages, { role: "user", content: prompt }];
     setChatMessages(nextMessages);
     setChatQuestion("");
     setChatLoading(true);
 
     try {
       const data = await api.chatbot({
-        question: chatQuestion,
+        question: prompt,
         risk_level: result?.risk_level || "",
         glucose: form.glucose,
         bmi: form.bmi,
+        messages: nextMessages.slice(-8),
       });
       const insightsText = data.insights?.length ? ` Insights: ${data.insights.join(" ")}` : "";
       setChatMessages((prev) => [...prev, { role: "assistant", content: `${data.answer}${insightsText}` }]);
@@ -521,6 +549,10 @@ function App() {
     } finally {
       setChatLoading(false);
     }
+  }
+
+  async function askAssistant() {
+    await submitAssistantQuestion(chatQuestion);
   }
 
   function toggleVoiceInput(target) {
@@ -542,8 +574,9 @@ function App() {
       if (!transcript) return;
 
       if (target === "field") {
-        const match = transcript.match(/-?\d+(\.\d+)?/);
-        const spokenValue = match ? match[0] : "";
+        const spokenValue = currentField.type === "select"
+          ? normalizeGenderValue(transcript)
+          : ((transcript.match(/-?\d+(\.\d+)?/) || [""])[0]);
         setForm((prev) => ({ ...prev, [currentField.key]: spokenValue }));
         setErrors((prev) => ({
           ...prev,
@@ -553,6 +586,7 @@ function App() {
 
       if (target === "chat") {
         setChatQuestion(transcript);
+        void submitAssistantQuestion(transcript);
       }
     };
 
@@ -615,7 +649,10 @@ function App() {
     };
   }, [history]);
 
-  const confidencePercent = result?.confidence ? Math.round(result.confidence * 100) : 0;
+  const confidencePercent =
+    result?.confidence !== null && result?.confidence !== undefined
+      ? Math.round(result.confidence * 100)
+      : 0;
   const riskColor =
     result?.risk_level === "high"
       ? "text-red-500"
@@ -834,22 +871,44 @@ function App() {
                   <p className="text-sm font-semibold uppercase tracking-widest text-slate-500">Step {step + 1} / {fields.length}</p>
                   <h4 className="mt-1 text-2xl">{currentField.label}</h4>
                   <p className="mt-2 text-slate-600">{currentField.tip}</p>
-                  <input
-                    type="number"
-                    min={currentField.min}
-                    max={currentField.max}
-                    step={currentField.step}
-                    value={form[currentField.key]}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setForm((prev) => ({ ...prev, [currentField.key]: value }));
-                      setErrors((prev) => ({ ...prev, [currentField.key]: validateField(currentField, value) }));
-                    }}
-                    className="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3 text-lg outline-none transition focus:border-blue-500"
-                    placeholder={`Enter ${currentField.label.toLowerCase()}`}
-                  />
+                  {currentField.type === "select" ? (
+                    <select
+                      value={form[currentField.key]}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setForm((prev) => ({ ...prev, [currentField.key]: value }));
+                        setErrors((prev) => ({ ...prev, [currentField.key]: validateField(currentField, value) }));
+                      }}
+                      className="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3 text-lg outline-none transition focus:border-blue-500"
+                    >
+                      {currentField.options.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="number"
+                      min={currentField.min}
+                      max={currentField.max}
+                      step={currentField.step}
+                      value={form[currentField.key]}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setForm((prev) => ({ ...prev, [currentField.key]: value }));
+                        setErrors((prev) => ({ ...prev, [currentField.key]: validateField(currentField, value) }));
+                      }}
+                      className="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3 text-lg outline-none transition focus:border-blue-500"
+                      placeholder={`Enter ${currentField.label.toLowerCase()}`}
+                    />
+                  )}
                   <div className="mt-3 flex items-center justify-between">
-                    <p className="text-xs text-slate-500">Tip: you can speak numbers like "glucose 132".</p>
+                    <p className="text-xs text-slate-500">
+                      {currentField.type === "select"
+                        ? "Tip: you can say male, female, or other."
+                        : `Tip: you can speak numbers like "${currentField.label.toLowerCase()} 132".`}
+                    </p>
                     <button
                       type="button"
                       disabled={!speechSupported}
@@ -944,7 +1003,10 @@ function App() {
                   {result.risk_level === "high" ? "High Risk" : result.risk_level === "medium" ? "Moderate Risk" : "Low Risk"}
                 </h3>
                 <p className="mt-2 text-slate-700">
-                  Model output: <strong>{result.prediction}</strong> {result.confidence ? `with ${confidencePercent}% confidence.` : "without probability score."}
+                  Model output: <strong>{result.prediction}</strong>{" "}
+                  {result.confidence !== null && result.confidence !== undefined
+                    ? `with ${confidencePercent}% confidence.`
+                    : "without probability score."}
                 </p>
                 {result.model_version ? (
                   <p className="mt-1 text-xs text-slate-500">Model version: {result.model_version}</p>
@@ -1043,7 +1105,18 @@ function App() {
               ))}
             </div>
             <div className="mt-3 flex gap-2">
-              <input value={chatQuestion} onChange={(e) => setChatQuestion(e.target.value)} placeholder="Ask about diet, exercise, result..." className="w-full rounded-xl border border-slate-300 px-3 py-2" />
+              <input
+                value={chatQuestion}
+                onChange={(e) => setChatQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void askAssistant();
+                  }
+                }}
+                placeholder="Ask about diet, exercise, result..."
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              />
               <button
                 onClick={() => toggleVoiceInput("chat")}
                 disabled={!speechSupported}
@@ -1057,6 +1130,14 @@ function App() {
             {!speechSupported ? <p className="mt-2 text-xs text-slate-500">Voice input is not supported in this browser.</p> : null}
           </motion.article>
         </section>
+
+        {user ? (
+          <UserStore user={user} />
+        ) : null}
+
+        {user ? (
+          <HealthcareManagement user={user} />
+        ) : null}
 
         {user ? (
           <motion.section {...cardReveal} className="glass rounded-3xl p-6">
@@ -1173,7 +1254,11 @@ function App() {
                                 <td className="py-2 pr-2 font-semibold text-slate-800">#{row.id}</td>
                                 <td className="py-2 pr-2">{row.user_id}</td>
                                 <td className="py-2 pr-2">{row.prediction}</td>
-                                <td className="py-2 pr-2">{row.confidence ? `${Math.round(row.confidence * 100)}%` : "N/A"}</td>
+                                <td className="py-2 pr-2">
+                                  {row.confidence !== null && row.confidence !== undefined
+                                    ? `${Math.round(row.confidence * 100)}%`
+                                    : "N/A"}
+                                </td>
                                 <td className="py-2 pr-2">{new Date(row.created_at).toLocaleString()}</td>
                               </tr>
                             ))}
@@ -1184,6 +1269,38 @@ function App() {
                       <p className="mt-3 text-sm text-slate-600">No assessments have been stored yet.</p>
                     )}
                   </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+                  <h4 className="text-lg font-semibold text-slate-900">Recent Login Activity</h4>
+                  {adminOverview.recent_auth_activity?.length ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full min-w-[42rem] text-left text-sm">
+                        <thead className="text-xs uppercase tracking-wider text-slate-500">
+                          <tr>
+                            <th className="pb-2">Time</th>
+                            <th className="pb-2">User</th>
+                            <th className="pb-2">Event</th>
+                            <th className="pb-2">Status</th>
+                            <th className="pb-2">IP</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {adminOverview.recent_auth_activity.map((row) => (
+                            <tr key={row.id} className="border-t border-slate-100">
+                              <td className="py-2 pr-3">{new Date(row.created_at).toLocaleString()}</td>
+                              <td className="py-2 pr-3">{row.username || `User #${row.user_id || "N/A"}`}</td>
+                              <td className="py-2 pr-3">{row.event_type}</td>
+                              <td className="py-2 pr-3">{row.status}</td>
+                              <td className="py-2 pr-3">{row.ip_address || "N/A"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-600">No login activity recorded yet.</p>
+                  )}
                 </div>
 
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
@@ -1221,7 +1338,11 @@ function App() {
                               <td className="py-2 pr-3 font-semibold text-slate-800">{u.assessment_count || 0}</td>
                               <td className="py-2 pr-3 text-red-600">{u.diabetic_count || 0}</td>
                               <td className="py-2 pr-3">{u.latest_prediction || "N/A"}</td>
-                              <td className="py-2 pr-3">{u.latest_confidence ? `${Math.round(u.latest_confidence * 100)}%` : "N/A"}</td>
+                              <td className="py-2 pr-3">
+                                {u.latest_confidence !== null && u.latest_confidence !== undefined
+                                  ? `${Math.round(u.latest_confidence * 100)}%`
+                                  : "N/A"}
+                              </td>
                               <td className="py-2 pr-3">{u.latest_glucose ?? "N/A"}</td>
                               <td className="py-2 pr-3">{u.latest_bmi ?? "N/A"}</td>
                               <td className="py-2 pr-3">{u.booking_count || 0}</td>

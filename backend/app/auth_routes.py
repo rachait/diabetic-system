@@ -8,6 +8,27 @@ from database import get_db_connection
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
+
+def _log_auth_event(event_type, status, user_id=None, username=None):
+    """Persist authentication activity for admin auditing."""
+    try:
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        user_agent = request.headers.get('User-Agent', '')
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO auth_activity_logs (user_id, username, event_type, status, ip_address, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''',
+            (user_id, username, event_type, status, ip_address, user_agent)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        # Logging must not break auth flow.
+        pass
+
 def hash_password(password):
     """Hash password with salt"""
     salt = secrets.token_hex(16)
@@ -74,6 +95,7 @@ def register():
         conn.close()
         
         session['user_id'] = user_id
+        _log_auth_event('register', 'success', user_id=user_id, username=username)
         
         return jsonify({
             'status': 'success',
@@ -104,9 +126,12 @@ def login():
         conn.close()
         
         if not user or not verify_password(user['password_hash'], password):
+            _log_auth_event('login', 'failed', username=username or None)
             return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
         
         session['user_id'] = user['id']
+        session['is_admin'] = bool(user['is_admin'])
+        _log_auth_event('login', 'success', user_id=user['id'], username=user['username'])
         
         return jsonify({
             'status': 'success',
@@ -124,6 +149,12 @@ def login():
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
     """Logout user"""
+    current_user_id = session.get('user_id')
+    current_username = None
+    if current_user_id:
+        user = get_user_by_id(current_user_id)
+        current_username = user.get('username') if user else None
+    _log_auth_event('logout', 'success', user_id=current_user_id, username=current_username)
     session.clear()
     return jsonify({'status': 'success', 'message': 'Logged out'}), 200
 

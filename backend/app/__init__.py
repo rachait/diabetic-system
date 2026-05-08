@@ -56,11 +56,19 @@ def create_app(config_name='development'):
     from app.auth_routes import auth_bp
     from app.store_routes import store_bp
     from app.wellness_routes import wellness_bp
+    from app.admin_routes import admin_bp
+    from app.user_routes import user_bp
+    from app.user_orders_alias import user_orders_bp
+    from app.user_api_alias import user_api_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(store_bp)
     app.register_blueprint(wellness_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(user_bp)
+    app.register_blueprint(user_orders_bp)
+    app.register_blueprint(user_api_bp)
 
     @app.after_request
     def set_security_headers(response):

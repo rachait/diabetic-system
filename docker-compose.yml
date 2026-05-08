@@ -9,7 +9,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./data:/workspace/data
+      - ./data/app.db:/app/data/app.db
 
   frontend:
     build:

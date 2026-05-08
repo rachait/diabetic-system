@@ -37,12 +37,28 @@ def get_products():
         
         cursor.execute(query, params)
         products = [dict(row) for row in cursor.fetchall()]
+
+        # Compute inventory metrics (always from full catalogue, not filtered)
+        cursor.execute('SELECT COUNT(*) as c FROM products')
+        total_products = cursor.fetchone()['c']
+        cursor.execute('SELECT COUNT(*) as c FROM products WHERE quantity_available = 0')
+        out_of_stock = cursor.fetchone()['c']
+        cursor.execute('SELECT COUNT(*) as c FROM products WHERE quantity_available > 0 AND quantity_available <= 10')
+        low_stock = cursor.fetchone()['c']
+        cursor.execute('SELECT SUM(price * quantity_available) as v FROM products')
+        inv_value = cursor.fetchone()['v'] or 0
+
         conn.close()
-        
         return jsonify({
             'status': 'success',
             'products': products,
-            'count': len(products)
+            'count': len(products),
+            'metrics': {
+                'total_products': total_products,
+                'out_of_stock_count': out_of_stock,
+                'low_stock_count': low_stock,
+                'inventory_value': round(float(inv_value), 2),
+            }
         }), 200
     
     except Exception as e:
@@ -63,6 +79,53 @@ def get_product(product_id):
         
         return jsonify({'status': 'success', 'product': dict(product)}), 200
     
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@store_bp.route('/products', methods=['POST'])
+def create_product():
+    """Add a new product (admin)"""
+    try:
+        if not session.get('user_id'):
+            return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
+        data = request.get_json() or {}
+        conn = get_db_connection()
+        conn.execute('''INSERT INTO products (name, category, description, price, quantity_available)
+            VALUES (?, ?, ?, ?, ?)''',
+            (data.get('name'), data.get('category'), data.get('description'), data.get('price', 0), data.get('quantity_available', 0)))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': 'Product created'}), 201
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@store_bp.route('/products/<int:product_id>', methods=['PUT'])
+def update_product(product_id):
+    """Update a product (admin)"""
+    try:
+        if not session.get('user_id'):
+            return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
+        data = request.get_json() or {}
+        conn = get_db_connection()
+        conn.execute('''UPDATE products SET name=?, category=?, description=?, price=?, quantity_available=? WHERE id=?''',
+            (data.get('name'), data.get('category'), data.get('description'), data.get('price'), data.get('quantity_available'), product_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': 'Product updated'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@store_bp.route('/products/<int:product_id>', methods=['DELETE'])
+def delete_product(product_id):
+    """Delete a product (admin)"""
+    try:
+        if not session.get('user_id'):
+            return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
+        conn = get_db_connection()
+        conn.execute('DELETE FROM products WHERE id=?', (product_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': 'Product deleted'}), 200
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -259,26 +322,34 @@ def checkout():
 
 @store_bp.route('/orders', methods=['GET'])
 def get_orders():
-    """Get user's orders"""
+    """Get user's orders (admin gets all orders)"""
     try:
         user_id = session.get('user_id')
-        
+        is_admin = session.get('is_admin')
+
         if not user_id:
             return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
-        
+
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, total_amount, status, created_at
-            FROM orders
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        ''', (user_id,))
-        
+
+        if is_admin:
+            cursor.execute('''
+                SELECT o.id, o.total_amount, o.status, o.created_at, u.username, u.full_name AS patient_name
+                FROM orders o
+                LEFT JOIN users u ON o.user_id = u.id
+                ORDER BY o.created_at DESC
+            ''')
+        else:
+            cursor.execute('''
+                SELECT id, total_amount, status, created_at
+                FROM orders
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            ''', (user_id,))
+
         orders = [dict(row) for row in cursor.fetchall()]
-        
-        # Get items for each order
+
         for order in orders:
             cursor.execute('''
                 SELECT p.name, oi.quantity, oi.price
@@ -287,14 +358,29 @@ def get_orders():
                 WHERE oi.order_id = ?
             ''', (order['id'],))
             order['items'] = [dict(row) for row in cursor.fetchall()]
-        
+
         conn.close()
-        
+
         return jsonify({
             'status': 'success',
             'orders': orders,
             'count': len(orders)
         }), 200
-    
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@store_bp.route('/orders/<int:order_id>/ship', methods=['PATCH'])
+def ship_order(order_id):
+    """Mark an order as shipped (admin only)"""
+    try:
+        if not session.get('user_id'):
+            return jsonify({'status': 'error', 'message': 'Not authenticated'}), 401
+        conn = get_db_connection()
+        conn.execute("UPDATE orders SET status = 'shipped' WHERE id = ?", (order_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': 'Order marked as shipped'}), 200
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
